@@ -2,7 +2,7 @@
 
 A BetterDiscord plugin for accepted Discord quests, progress tracking, quest filters and new quest notifications.
 
-**Version 1.0.0.** English interface. Quest names follow Discord's language.
+**Version 1.0.1.** English interface. Quest names follow Discord's language.
 
 ## Features
 
@@ -27,7 +27,13 @@ Accept quests and claim rewards manually.
 
 On Windows the usual plugins folder is `%APPDATA%\BetterDiscord\plugins`.
 
-No build tools, extra scripts or libraries are required. The plugin file contains its source. For updates, replace that file.
+No build tools, extra scripts or libraries are required. The plugin file contains its source.
+
+## Updates
+
+Starting with 1.0.1, the plugin checks its public GitHub file on enable and every four hours. A newer version produces a standard BetterDiscord notification with **Update** and **Later** buttons. Update replaces the plugin file without creating a backup. If quests are active, installation waits until that run ends or is paused. Later dismisses the notification for this plugin session; it can appear again after restart.
+
+Users of 1.0.0 must install 1.0.1 manually once to receive future update notifications. Updates require access to GitHub and a BetterDiscord version supporting `BdApi.Net.fetch` and `BdApi.UI.showNotification`. Download manually if these are unavailable.
 
 ## Usage
 
@@ -72,11 +78,11 @@ Avoid running other quest automation plugins or console scripts simultaneously: 
 
 Discord updates can break internal module discovery, requests or layout selectors. New quests with incomplete metadata can be missed by notification detection. Detection depends on Discord's loaded data, not an independent server monitor.
 
-The execution code was verified in the maintainer's Windows desktop client. Automated notification checks use simulated Discord data; compatibility with every quest or future client version is not guaranteed. This is an unofficial plugin, with no automatic remote code updater.
+The execution code was verified in the maintainer's Windows desktop client. Automated notification and updater checks use simulated Discord data; compatibility with every quest or future client version is not guaranteed. This is an unofficial plugin.
 
 ## Privacy
 
-No separate analytics or third-party notification service. No code or audio downloads at runtime; sound is synthesized locally. Settings and notification history use BetterDiscord's local data storage. Quest execution sends requests through Discord's internal client API.
+No separate analytics or third-party notification service. The updater downloads the public plugin file from this GitHub repository to check versions, but installs it only after pressing Update. Sound is synthesized locally. Settings and notification history use BetterDiscord's local data storage. Quest execution sends requests through Discord's internal client API.
 
 For bug reports, include the version, task type and sanitized error text. Do not publish your account configuration or full network logs.
 

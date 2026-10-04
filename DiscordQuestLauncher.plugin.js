@@ -2,15 +2,18 @@
  * @name DiscordQuestLauncher
  * @author Suraj64x (original script), monbev (plugin)
  * @description Quest status filters, confirmed progress, estimated queue time and play/pause controls.
- * @version 1.0.0
- * @source https://github.com/Suraj64x/discordquest
+ * @version 1.0.1
+ * @source https://github.com/monbev/DiscordQuestLauncher
+ * @updateUrl https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js
  */
 // SPDX-License-Identifier: GPL-3.0-only
 // Based on Suraj64x/discordquest, retrieved 2026-10-02.
-// Original quest algorithms with plugin lifecycle tracking. No remote code loading.
+// Original quest algorithms with plugin lifecycle tracking. Updates require a user action.
 const NAME = "DiscordQuestLauncher";
 const PANEL_ID = "discord-quest-launcher-panel";
 const FILTER_ID = "discord-quest-launcher-filters";
+const PLUGIN_VERSION = "1.0.1";
+const UPDATE_URL = "https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js";
 
 function questAction(button) {
     const text = `${button.textContent || ""} ${button.getAttribute?.("aria-label") || ""}`
@@ -283,6 +286,9 @@ module.exports = class DiscordQuestLauncher {
     start() {
         if (this.enabled) return;
         this.enabled = true;
+        this.updateOwner = {}; this.updateCandidate = null; this.updateChecking = false; this.updateWriting = false;
+        this.checkPluginUpdate();
+        this.updateCheckTimer = setInterval(() => this.checkPluginUpdate(), 4 * 60 * 60 * 1000);
         this.uiSettings = {state: (BdApi.Data?.load(NAME, "uiSettings") || {}).state || "all"};
         if (!["all", "new", "active", "rewards"].includes(this.uiSettings.state)) this.uiSettings.state = "all";
         this.noticeSettings = this.loadNoticeSettings();
@@ -806,8 +812,69 @@ module.exports = class DiscordQuestLauncher {
         this.session = session; this.render();
         session.launch();
     }
+    async checkPluginUpdate() {
+        if (!this.enabled || this.updateChecking || this.updateWriting || !BdApi.Net?.fetch || !BdApi.UI?.showNotification) return;
+        const owner = this.updateOwner; this.updateChecking = true;
+        try {
+            const response = await BdApi.Net.fetch(UPDATE_URL, {timeout: 10000});
+            if (!response.ok) throw new Error(`Update check HTTP ${response.status}`);
+            const source = await response.text();
+            if (!this.enabled || this.updateOwner !== owner) return;
+            const header = source.match(/^\s*\/\*\*[\s\S]*?\*\//)?.[0] || "";
+            const name = header.match(/@name\s+([^\r\n]+)/)?.[1]?.trim();
+            const version = header.match(/@version\s+(\d+\.\d+\.\d+)\s*(?:\r?\n|\*\/)/)?.[1];
+            if (name !== NAME || !version || !source.includes("module.exports")) throw new Error("Invalid plugin update file");
+            const incoming = version.split(".").map(Number), installed = PLUGIN_VERSION.split(".").map(Number);
+            const difference = incoming.map((value, index) => value - installed[index]).find(value => value !== 0) || 0;
+            if (difference <= 0 || this.updateCandidate?.version === version) return;
+            // Compile for syntax validation without running the downloaded code.
+            new Function(source);
+            this.updateNotification?.close?.();
+            this.updateCandidate = {version, source};
+            this.updateNotification = BdApi.UI.showNotification({
+                title: "DiscordQuestLauncher Update Available",
+                content: `Version ${version} is available. Update now? Active quests will finish before installation.`,
+                duration: Infinity,
+                actions: [{label: "Update", onClick: () => this.requestPluginUpdate()},
+                    {label: "Later", onClick: () => this.updateNotification?.close?.()}]
+            });
+        } catch (error) {
+            if (this.enabled && this.updateOwner === owner) console.error(`[${NAME}] Update check:`, error);
+        } finally { if (this.updateOwner === owner) this.updateChecking = false; }
+    }
+    requestPluginUpdate() {
+        if (!this.enabled || !this.updateCandidate || this.updateWriting || this.updateWaitTimer) return;
+        if (this.session?.active) {
+            BdApi.UI.showToast("Update will install when the current quest run ends.", {type: "info"});
+            this.updateWaitTimer = setInterval(() => {
+                if (!this.session?.active) { clearInterval(this.updateWaitTimer); this.updateWaitTimer = null; this.installPluginUpdate(); }
+            }, 1000);
+        } else this.installPluginUpdate();
+    }
+    async installPluginUpdate() {
+        if (!this.enabled || this.session?.active || !this.updateCandidate || this.updateWriting) return;
+        const owner = this.updateOwner, candidate = this.updateCandidate; this.updateWriting = true;
+        try {
+            const folder = BdApi.Plugins?.folder;
+            if (!folder) throw new Error("BetterDiscord plugins folder unavailable");
+            const fs = require("fs"), path = require("path");
+            // Replace only this plugin, without creating a backup file.
+            await fs.promises.writeFile(path.join(folder, `${NAME}.plugin.js`), candidate.source, "utf8");
+            if (!this.enabled || this.updateOwner !== owner) return;
+            this.updateNotification?.close?.(); this.updateCandidate = null;
+            BdApi.UI.showToast(`DiscordQuestLauncher updated to ${candidate.version}.`, {type: "success"});
+        } catch (error) {
+            if (this.enabled && this.updateOwner === owner) {
+                console.error(`[${NAME}] Update installation:`, error);
+                BdApi.UI.showToast("Update failed. Try again or download the plugin from GitHub.", {type: "error"});
+            }
+        } finally { if (this.updateOwner === owner) this.updateWriting = false; }
+    }
     stop() {
         this.enabled = false;
+        this.updateOwner = null; clearInterval(this.updateCheckTimer); clearInterval(this.updateWaitTimer);
+        this.updateCheckTimer = null; this.updateWaitTimer = null; this.updateNotification?.close?.();
+        this.updateNotification = null; this.updateCandidate = null;
         document.removeEventListener?.("visibilitychange", this.noticeVisibilityListener);
         this.noticeVisibilityListener = null;
         if (this.audioContext) { this.audioContext.close().catch(() => {}); this.audioContext = null; }
