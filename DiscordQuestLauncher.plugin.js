@@ -349,6 +349,30 @@ module.exports = class DiscordQuestLauncher {
             #dql-reminders .dql-lifetime span { display:block; height:100%; background:var(--brand-500,#5865f2); transform-origin:left; transition:transform .1s linear; }
             @media (prefers-reduced-motion:reduce) { #dql-reminders .dql-lifetime span { transition:none; } }
             .dql-reward-hint { padding:12px; margin-top:16px; border-radius:8px; background:var(--background-secondary,#232428); border-left:3px solid var(--brand-500,#5865f2); color:var(--text-normal,#fff); font:13px/1.5 var(--font-primary,sans-serif); }
+            #${PANEL_ID} { position:static; display:block; margin:0 0 20px; padding:16px; border:1px solid var(--background-modifier-accent,#454550); border-radius:12px; background:var(--background-secondary,#232428); }
+            #${PANEL_ID} .dql-run-header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+            #${PANEL_ID} .dql-run-status { font-size:14px; font-weight:600; }
+            #${PANEL_ID} .dql-run-help { color:var(--text-muted); font-size:12px; margin-top:4px; }
+            #${PANEL_ID} .dql-progress { display:block; width:auto; padding:0; margin-top:14px; background:transparent; box-shadow:none; font-size:13px; }
+            #${PANEL_ID} .dql-progress-row { margin-top:14px; }
+            #${PANEL_ID} .dql-quest-name { font-weight:600; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+            #${PANEL_ID} .dql-row-top { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
+            #${PANEL_ID} .dql-row-time { color:var(--text-muted); flex-shrink:0; font-size:12px; }
+            #${PANEL_ID} .dql-state { font-size:12px; }
+            #${PANEL_ID} .dql-errors { margin-top:12px; padding:10px 12px; border-radius:8px; background:var(--background-modifier-accent); font-size:12px; }
+            #${PANEL_ID} .dql-errors summary { cursor:pointer; color:var(--status-danger,#f23f43); }
+            #${PANEL_ID} .dql-errors pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; color:var(--text-muted); }
+            #${PANEL_ID} button { width:auto; height:36px; padding:0 12px; display:flex; gap:7px; box-shadow:none; border-radius:7px; font:inherit; font-size:13px; }
+            #${PANEL_ID} button:disabled { opacity:.5; cursor:default; transform:none; }
+            #dql-reminders button:first-child { background:var(--background-modifier-accent,#454550); color:inherit; }
+            .dql-settings input[type="checkbox"] { appearance:none; width:38px!important; height:22px!important; border-radius:20px; background:var(--background-modifier-accent,#454550); cursor:pointer; position:relative; transition:background .15s; }
+            .dql-settings input[type="checkbox"]:checked { background:var(--brand-500,#5865f2); }
+            .dql-settings input[type="checkbox"]::before { content:""; position:absolute; width:16px; height:16px; border-radius:50%; background:white; top:3px; left:3px; transition:transform .15s; }
+            .dql-settings input[type="checkbox"]:checked::before { transform:translateX(16px); }
+            .dql-settings input:focus-visible { outline:2px solid var(--brand-500,#5865f2); outline-offset:3px; }
+            .dql-settings button { cursor:pointer; }
+            @media(max-width:600px) { #${PANEL_ID} .dql-row-top { flex-wrap:wrap; gap:3px; } }
+            @media(prefers-reduced-motion:reduce) { #${PANEL_ID} .dql-track span, .dql-settings input { transition:none; } }
         `);
         this.observer = new MutationObserver(() => this.scheduleRender());
         this.observer.observe(document.body, {childList: true, subtree: true});
@@ -384,9 +408,25 @@ module.exports = class DiscordQuestLauncher {
             this.progress.setAttribute("role", "status"); this.progress.setAttribute("aria-live", "polite");
             this.button = document.createElement("button"); this.button.type = "button";
             this.button.addEventListener("click", () => this.toggleExecution());
-            panel.append(this.progress, this.button); document.body.append(panel); this.panel = panel;
+            const header = document.createElement("div"); header.className = "dql-run-header";
+            const copy = document.createElement("div");
+            this.runStatus = document.createElement("div"); this.runStatus.className = "dql-run-status";
+            this.runHelp = document.createElement("div"); this.runHelp.className = "dql-run-help";
+            copy.append(this.runStatus, this.runHelp); header.append(copy, this.button);
+            this.errorDetails = document.createElement("details"); this.errorDetails.className = "dql-errors";
+            this.errorSummary = document.createElement("summary"); this.errorCopy = document.createElement("pre");
+            this.errorDetails.append(this.errorSummary, this.errorCopy);
+            panel.append(header, this.progress, this.errorDetails); this.panel = panel;
         }
+        const anchor = this.acceptControls;
+        if (anchor?.parentElement?.insertBefore) {
+            if (anchor.nextSibling !== this.panel) anchor.parentElement.insertBefore(this.panel, anchor.nextSibling);
+        } else if (anchor && !this.panel.isConnected) anchor.append(this.panel);
+        this.panel.hidden = !anchor?.isConnected;
         const running = !!this.session?.active;
+        this.runStatus.textContent = running ? "Running quests" : this.lastResult?.startsWith("Paused") ? "Paused"
+            : this.lastDetail ? "Finished with errors" : this.lastResult?.startsWith("Confirmed") ? "Run finished" : "Quest execution";
+        this.runHelp.textContent = running ? "One video and one game/activity can run together." : "Play runs all accepted quests, regardless of the filters above.";
         const session = this.session;
         const currentName = session?.runningNames.join("\n") || "Quests";
         const counter = running && session.total ? `${session.processed}/${session.total}` : "";
@@ -400,13 +440,16 @@ module.exports = class DiscordQuestLauncher {
             this.button.innerHTML = running
                 ? '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>'
                 : '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M8 5.5a1 1 0 0 1 1.5-.86l10 6.5a1 1 0 0 1 0 1.72l-10 6.5A1 1 0 0 1 8 18.5z"/></svg>';
+            const buttonLabel = document.createElement("span"); buttonLabel.textContent = running ? "Pause" : "Play"; this.button.append(buttonLabel);
         }
         const action = running ? "Pause quests" : "Start quests";
         this.button.setAttribute("aria-label", action);
         this.button.setAttribute("aria-pressed", String(running));
-        this.button.disabled = false;
+        this.button.disabled = !!this.acceptingQuests;
         const detail = running ? session.failures.map(item => item.name + ": " + item.detail).join("\n") : this.lastDetail;
         this.button.title = [action, label, detail].filter(Boolean).join("\n");
+        this.errorDetails.hidden = !detail; this.errorSummary.textContent = "Quest errors — view details";
+        this.errorCopy.textContent = detail || "";
     }
     toggleExecution() {
         if (!this.enabled || this.acceptingQuests) return;
@@ -441,12 +484,14 @@ module.exports = class DiscordQuestLauncher {
             let nodes = this.rowNodes.get(row.lane);
             if (!nodes) {
                 const line = document.createElement("div"); line.className = "dql-progress-row";
-                const text = document.createElement("div"), track = document.createElement("div"), estimated = document.createElement("span"), confirmed = document.createElement("span"), state = document.createElement("div");
+                const text = document.createElement("div"), name = document.createElement("div"), top = document.createElement("div"), track = document.createElement("div"), estimated = document.createElement("span"), confirmed = document.createElement("span"), state = document.createElement("div");
+                name.className = "dql-quest-name"; text.className = "dql-row-time"; top.className = "dql-row-top"; top.append(name, text);
                 track.className = "dql-track"; estimated.className = "dql-estimated"; confirmed.className = "dql-confirmed"; state.className = "dql-state";
-                track.setAttribute("role", "progressbar"); track.append(estimated, confirmed); line.append(text, track, state); this.progressRows.append(line);
-                nodes = {line, text, track, estimated, confirmed, state}; this.rowNodes.set(row.lane, nodes);
+                track.setAttribute("role", "progressbar"); track.append(estimated, confirmed); line.append(top, track, state); this.progressRows.append(line);
+                nodes = {line, name, text, track, estimated, confirmed, state}; this.rowNodes.set(row.lane, nodes);
             }
             const {line, text, track, estimated, confirmed, state} = nodes;
+            nodes.name.textContent = row.name; nodes.name.title = row.name;
             line.title = `${row.name}\nConfirmed: ${row.value === null ? "unknown" : formatSeconds(row.value)}. Light segment and ~ timer are estimated.`;
             line.setAttribute("data-waiting", String(!!row.waiting));
             const value = Number.isFinite(row.estimated) ? `${row.estimated > row.value ? "~" : ""}${formatSeconds(row.estimated)} / ${formatSeconds(row.target)}` : "Waiting for progress";
@@ -455,7 +500,7 @@ module.exports = class DiscordQuestLauncher {
             confirmed.style.width = `${100 * (row.value || 0) / (row.target || 1)}%`;
             track.setAttribute("aria-label", `${row.name}: confirmed progress`); track.setAttribute("aria-valuemin", "0"); track.setAttribute("aria-valuemax", String(row.target));
             if (row.value !== null) track.setAttribute("aria-valuenow", String(row.value)); else track.removeAttribute("aria-valuenow");
-            state.textContent = row.visualState || ""; state.hidden = !row.visualState;
+            state.textContent = row.confirmed ? "✓ Completed" : row.visualState || (row.active ? "Running" : "Paused / stopped"); state.hidden = false;
         }
     }
     saveUI() { BdApi.Data?.save(NAME, "uiSettings", this.uiSettings); }
@@ -635,7 +680,7 @@ module.exports = class DiscordQuestLauncher {
                 const copy = document.createElement("div"); copy.className = "dql-notice-copy";
                 const actions = document.createElement("div"); actions.className = "dql-notice-actions";
                 const help = document.createElement("div"); help.className = "dql-notice-copy";
-                help.textContent = "Open Quests in Discord to view the new quests.";
+                help.textContent = "View them in Quests.";
                 if (kind === "new") {
                     const snooze = document.createElement("button"); snooze.type = "button";
                     snooze.addEventListener("click", () => this.reminderAction("snooze")); actions.append(snooze);
@@ -704,8 +749,9 @@ module.exports = class DiscordQuestLauncher {
             const copy = document.createElement("div"); const name = document.createElement("strong"); name.textContent = title;
             const help = document.createElement("div"); help.textContent = description; help.style.cssText = "color:var(--text-muted);font-size:12px;margin-top:3px"; copy.append(name, help);
             const input = document.createElement("input"); input.type = "checkbox"; input.checked = this.noticeSettings[key];
+            input.setAttribute("role", "switch"); input.setAttribute("aria-label", title); input.setAttribute("aria-checked", String(input.checked));
             input.style.cssText = "width:20px;height:20px;accent-color:var(--brand-500,#5865f2);flex-shrink:0";
-            input.addEventListener("change", () => { this.noticeSettings[key] = input.checked; save(); });
+            input.addEventListener("change", () => { this.noticeSettings[key] = input.checked; input.setAttribute("aria-checked", String(input.checked)); save(); });
             row.append(copy, input); notices.append(row);
         }
         const volumeRow = document.createElement("label"); volumeRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0";
@@ -714,15 +760,18 @@ module.exports = class DiscordQuestLauncher {
         volume.setAttribute("aria-label", "Notification sound volume"); volume.style.cssText = "width:160px;accent-color:var(--brand-500,#5865f2)";
         const volumeValue = document.createElement("span"); volumeValue.textContent = this.noticeSettings.volume + "%";
         volume.addEventListener("input", () => { this.noticeSettings.volume = Number(volume.value); volumeValue.textContent = volume.value + "%"; BdApi.Data?.save(NAME, "noticeSettings", this.noticeSettings); });
-        volumeRow.append(volumeLabel, volume, volumeValue); notices.append(volumeRow);
+        const previewSound = document.createElement("button"); previewSound.type = "button"; previewSound.textContent = "Test sound";
+        previewSound.style.cssText = "padding:6px 10px;border:0;border-radius:6px;background:var(--background-modifier-accent);color:var(--text-normal);font:inherit;font-size:12px";
+        previewSound.addEventListener("click", () => this.playNoticeSound());
+        volumeRow.style.flexWrap = "wrap"; volumeRow.append(volumeLabel, volume, volumeValue, previewSound); notices.append(volumeRow);
         const timing = section("Notification timing", "Top-right notifications close automatically. Display duration applies to the next notification. Check interval reads Discord's loaded quest data; it does not fetch new data from the server.");
-        for (const [key, title, unit, min, max] of [["displaySeconds", "Display duration", "seconds", 1, 300], ["checkSeconds", "Check for new quests every", "seconds", 5, 3600], ["snoozeHours", "Snooze duration", "hours", 1, 720]]) {
+        for (const [key, title, unit, min, max, factor] of [["displaySeconds", "Display duration", "seconds", 1, 300, 1], ["checkSeconds", "Check for new quests every", "minutes", 5 / 60, 60, 60], ["snoozeHours", "Snooze duration", "hours", 1, 720, 1]]) {
             const row = document.createElement("label"); row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0";
             const name = document.createElement("span"); name.textContent = title;
             const controls = document.createElement("div"); controls.style.cssText = "display:flex;align-items:center;gap:8px";
-            const input = document.createElement("input"); input.type = "number"; input.min = String(min); input.max = String(max); input.value = this.noticeSettings[key];
+            const input = document.createElement("input"); input.type = "number"; input.min = String(min); input.max = String(max); input.step = factor === 60 ? "any" : "1"; input.value = this.noticeSettings[key] / factor; input.setAttribute("aria-label", `${title} (${unit})`);
             input.style.cssText = "width:76px;padding:8px;border-radius:6px;border:1px solid var(--background-modifier-accent,#454550);background:var(--background-tertiary,#18191c);color:var(--text-normal)";
-            input.addEventListener("change", () => { this.noticeSettings[key] = Math.min(max, Math.max(min, Number(input.value) || min)); input.value = this.noticeSettings[key]; save(); });
+            input.addEventListener("change", () => { this.noticeSettings[key] = Math.round(Math.min(max, Math.max(min, Number(input.value) || min)) * factor); input.value = this.noticeSettings[key] / factor; save(); });
             controls.append(input, document.createTextNode(unit)); row.append(name, controls); timing.append(row);
         }
         const testSection = section("Test notifications", "Preview the countdown and hover pause without changing your quest notification history.");
@@ -822,14 +871,18 @@ module.exports = class DiscordQuestLauncher {
             this.acceptButton.style.cssText = "padding:8px 12px;border:0;border-radius:6px;background:var(--brand-500,#5865f2);color:white;font:inherit;cursor:pointer";
             this.acceptButton.addEventListener("click", () => this.acceptNewQuests());
             const help = document.createElement("span"); help.id = "dql-accept-help"; help.style.color = "var(--text-muted)";
-            help.textContent = "Set your quest and Discord filters first, then click Accept new. Only visible New quests will be accepted.";
+            help.textContent = "Set your filters first. Accept applies only to visible New quests.";
             this.acceptButton.setAttribute("aria-describedby", help.id); row.append(this.acceptButton, help); this.acceptControls = row;
         }
         if (heading.parentElement?.insertBefore) {
             if (heading.nextSibling !== this.acceptControls) heading.parentElement.insertBefore(this.acceptControls, heading.nextSibling);
         } else if (!this.acceptControls.isConnected) heading.append(this.acceptControls);
-        const disabled = !!this.acceptingQuests || !!this.session?.active || !["all", "new"].includes(this.uiSettings.state);
-        this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : "Accept new";
+        const candidates = this.acceptanceCandidates(), count = candidates.ready.length;
+        const disabled = !!this.acceptingQuests || !!this.session?.active || !["all", "new"].includes(this.uiSettings.state) || !count;
+        this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : `Accept new · ${count}`;
+        this.acceptControls.children[1].textContent = this.acceptingQuests ? "Waiting for Discord to confirm acceptance…" : this.session?.active ? "Pause the current run before accepting new quests."
+            : !count ? candidates.manual ? "Matching quests need manual action in Discord." : "No new quests match your filters."
+            : "Set your filters first. Accept applies only to visible New quests.";
         this.acceptButton.disabled = disabled; this.acceptButton.style.opacity = disabled ? "0.5" : "1";
         this.acceptButton.title = !["all", "new"].includes(this.uiSettings.state) ? "Select All or New to display new quests." : "Accept only visible New quests matching all current filters.";
     }

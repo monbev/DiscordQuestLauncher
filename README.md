@@ -11,6 +11,7 @@ A BetterDiscord plugin for accepted Discord quests, progress tracking, quest fil
 - One video quest and one game/stream/activity quest run in parallel, sequentially within each queue.
 - All / New / In progress / Rewards filters. New excludes Launch Quest tasks.
 - Confirmed progress plus an estimated bar and timer updated every second.
+- Inline execution panel below the acceptance controls, with quest names, Play/Pause, visible states and expandable errors.
 - Approximate total remaining time in minutes.
 - Top-right new quest notifications with sound, countdown, snooze and dismissal.
 - Notifications wait while Discord is hidden; existing countdowns pause.
@@ -60,6 +61,8 @@ The solid progress segment is confirmed by Discord. The lighter segment and `~` 
 | Optional Windows notifications | Off |
 
 Settings are available from the plugin's settings button. Saved custom timings are preserved when updating.
+
+The check interval is displayed in minutes; card duration uses seconds and snooze uses hours. Notification switches and a separate Test sound button are available. Accept new shows the number of actionable visible New quests, or an explanation when no matching actions are available.
 
 Checks read Discord's loaded quest data; they do not fetch a fresh list from the server. Checks run on enable, on returning to the visible window and at the configured interval. Changing this interval does not affect execution speed or the progress timer.
 
