@@ -384,15 +384,9 @@ module.exports = class DiscordQuestLauncher {
             this.progress.setAttribute("role", "status"); this.progress.setAttribute("aria-live", "polite");
             this.button = document.createElement("button"); this.button.type = "button";
             this.button.addEventListener("click", () => this.toggleExecution());
-            this.acceptButton = document.createElement("button"); this.acceptButton.type = "button";
-            this.acceptButton.style.cssText = "width:auto;padding:0 12px;font-size:12px";
-            this.acceptButton.addEventListener("click", () => this.acceptNewQuests());
-            panel.append(this.progress, this.acceptButton, this.button); document.body.append(panel); this.panel = panel;
+            panel.append(this.progress, this.button); document.body.append(panel); this.panel = panel;
         }
         const running = !!this.session?.active;
-        this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : "Accept new";
-        this.acceptButton.disabled = !!this.acceptingQuests || running;
-        this.acceptButton.title = "Accept visible New quests matching all current filters. Video quests open and close; platform selection is manual.";
         const session = this.session;
         const currentName = session?.runningNames.join("\n") || "Quests";
         const counter = running && session.total ? `${session.processed}/${session.total}` : "";
@@ -466,6 +460,7 @@ module.exports = class DiscordQuestLauncher {
     }
     saveUI() { BdApi.Data?.save(NAME, "uiSettings", this.uiSettings); }
     restoreCards() {
+        this.acceptControls?.remove(); this.acceptControls = null; this.acceptButton = null;
         for (const card of this.filteredCards || []) card.removeAttribute("data-dql-filter-hidden");
         this.filteredCards = new Set();
         this.filterHeading?.removeAttribute("data-dql-heading"); this.filterHeading = null;
@@ -767,6 +762,7 @@ module.exports = class DiscordQuestLauncher {
             this.filterHeading?.removeAttribute("data-dql-heading"); this.filterHeading = heading;
         }
         if (heading.getAttribute("data-dql-heading") !== "true") heading.setAttribute("data-dql-heading", "true");
+        this.renderAcceptanceControls(heading);
         const cards = findQuestCards();
         const live = new Set(cards.map(questCardTarget));
         for (const card of this.filteredCards || []) if (!live.has(card)) card.removeAttribute("data-dql-filter-hidden");
@@ -817,6 +813,25 @@ module.exports = class DiscordQuestLauncher {
         }, () => this.render());
         this.session = session; this.render();
         session.launch();
+    }
+    renderAcceptanceControls(heading) {
+        if (!this.acceptControls?.isConnected) {
+            const row = document.createElement("div"); row.className = "dql-accept-controls";
+            row.style.cssText = "display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 16px;padding:12px 14px;border-radius:8px;background:var(--background-secondary);color:var(--text-normal);font-size:13px";
+            this.acceptButton = document.createElement("button"); this.acceptButton.type = "button";
+            this.acceptButton.style.cssText = "padding:8px 12px;border:0;border-radius:6px;background:var(--brand-500,#5865f2);color:white;font:inherit;cursor:pointer";
+            this.acceptButton.addEventListener("click", () => this.acceptNewQuests());
+            const help = document.createElement("span"); help.id = "dql-accept-help"; help.style.color = "var(--text-muted)";
+            help.textContent = "Set your quest and Discord filters first, then click Accept new. Only visible New quests will be accepted.";
+            this.acceptButton.setAttribute("aria-describedby", help.id); row.append(this.acceptButton, help); this.acceptControls = row;
+        }
+        if (heading.parentElement?.insertBefore) {
+            if (heading.nextSibling !== this.acceptControls) heading.parentElement.insertBefore(this.acceptControls, heading.nextSibling);
+        } else if (!this.acceptControls.isConnected) heading.append(this.acceptControls);
+        const disabled = !!this.acceptingQuests || !!this.session?.active || !["all", "new"].includes(this.uiSettings.state);
+        this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : "Accept new";
+        this.acceptButton.disabled = disabled; this.acceptButton.style.opacity = disabled ? "0.5" : "1";
+        this.acceptButton.title = !["all", "new"].includes(this.uiSettings.state) ? "Select All or New to display new quests." : "Accept only visible New quests matching all current filters.";
     }
     acceptanceCandidates(now = Date.now()) {
         const result = {ready: [], manual: 0}; const seen = new Set();
