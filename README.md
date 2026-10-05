@@ -70,6 +70,7 @@ Existing quests are silently remembered on first use for an account. Newly detec
 
 - **Snooze** postpones all new quest notifications, including future arrivals, and persists across restart. Eligible snoozed quests return afterward.
 - **Dismiss current** and **×** suppress the current pending quests. Later quest IDs can notify.
+- Click the notification body or **Open Quests** to open Discord's Quests page. Windows notification clicks use the same action and request focus for the Discord window. Filters remain unchanged. If internal routing is unavailable, a native quest link is tried; failures show a manual-navigation message.
 - A card that expires automatically does not repeatedly notify about the same quests.
 - Hidden-window arrivals remain pending and silent. Existing countdowns pause. Returning to Discord rechecks eligibility before display. Optional Windows notifications are also deferred with the card.
 - Hover/focus pause keeps the card readable. Test notification previews the card and sound without changing quest history.

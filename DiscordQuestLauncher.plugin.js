@@ -615,6 +615,45 @@ module.exports = class DiscordQuestLauncher {
             clearInterval(this.noticeAnimationTimer); this.noticeAnimationTimer = null;
         }
     }
+    async openNoticeQuests(account = this.noticeAccount) {
+        if (!this.enabled || this.noticeNavigating) return false;
+        const currentUser = BdApi.Webpack?.getStore?.("UserStore")?.getCurrentUser?.();
+        if (account && currentUser?.id !== account) {
+            BdApi.UI.showToast("This notification belongs to another Discord account.", {type: "info"}); return false;
+        }
+        this.noticeNavigating = true;
+        const owner = this.updateOwner;
+        try {
+            window.focus?.();
+            if (!this.isQuestsPage()) {
+                let router;
+                try { router = BdApi.Webpack?.getModule?.(item => typeof item?.transitionTo === "function" && typeof item?.replaceWith === "function", {searchExports: true}); } catch {}
+                if (router) router.transitionTo("/quest-home");
+                else {
+                    // Native navigation fallback: click Discord's route link,
+                    // never change location directly or reload the client.
+                    const link = [...document.querySelectorAll('a[href]')].find(node => /^(?:\/quest-home|\/quests)(?:[/?#]|$)/.test(node.getAttribute("href") || ""));
+                    if (!link) throw new Error("Discord quest navigation unavailable");
+                    link.click();
+                }
+            }
+            for (let attempt = 0; attempt < 12 && !this.isQuestsPage(); attempt++) {
+                await new Promise(resolve => {
+                    this.noticeNavigationResolve = resolve;
+                    this.noticeNavigationTimer = setTimeout(() => { this.noticeNavigationTimer = null; this.noticeNavigationResolve = null; resolve(); }, 250);
+                });
+                if (!this.enabled || this.updateOwner !== owner) return false;
+            }
+            if (!this.isQuestsPage()) throw new Error("Discord did not open Quests");
+            this.closeNotice("new"); this.scheduleRender(); return true;
+        } catch (error) {
+            if (this.enabled && this.updateOwner === owner) {
+                console.error(`[${NAME}] Quest navigation:`, error);
+                BdApi.UI.showToast("Could not open Quests automatically. Open Quests from Discord's navigation.", {type: "error"});
+            }
+            return false;
+        } finally { if (this.updateOwner === owner) this.noticeNavigating = false; }
+    }
     reminderAction(action, now = Date.now()) {
         const state = this.noticeSnapshot?.history.newQuests;
         if (!state) return;
@@ -680,12 +719,20 @@ module.exports = class DiscordQuestLauncher {
                 const copy = document.createElement("div"); copy.className = "dql-notice-copy";
                 const actions = document.createElement("div"); actions.className = "dql-notice-actions";
                 const help = document.createElement("div"); help.className = "dql-notice-copy";
-                help.textContent = "View them in Quests.";
+                help.textContent = "Open Quests to view the new arrivals.";
                 if (kind === "new") {
                     const snooze = document.createElement("button"); snooze.type = "button";
                     snooze.addEventListener("click", () => this.reminderAction("snooze")); actions.append(snooze);
                     const dismiss = document.createElement("button"); dismiss.type = "button"; dismiss.textContent = "Dismiss current";
                     dismiss.addEventListener("click", () => this.reminderAction("dismiss")); actions.append(dismiss);
+                    const open = document.createElement("button"); open.type = "button"; open.textContent = "Open Quests";
+                    const noticeAccount = this.noticeAccount;
+                    open.addEventListener("click", () => this.openNoticeQuests(noticeAccount)); actions.append(open);
+                    node.addEventListener("click", event => {
+                        if (event.target?.closest?.('button, a, input')) return;
+                        this.openNoticeQuests(noticeAccount);
+                    });
+                    title.style.cursor = "pointer"; copy.style.cursor = "pointer";
                 }
                 const close = document.createElement("button"); close.type = "button"; close.className = "dql-close"; close.textContent = "×"; close.setAttribute("aria-label", "Close notification");
                 close.addEventListener("click", () => { if (kind === "new") this.reminderAction("dismiss"); else { this.closeNotice(kind); this.renderNotices(); } });
@@ -706,7 +753,9 @@ module.exports = class DiscordQuestLauncher {
                     state.systemSeen ||= {};
                     if (unseen.some(id => !state.systemSeen[id])) try {
                         this.systemNotices.get(kind)?.notification.close();
-                        const notification = new Notification(NAME, {body: data.title + "\nOpen Quests in Discord to view them.", tag: NAME + "-new"});
+                        const notification = new Notification(NAME, {body: data.title + "\nClick to open Quests in Discord.", tag: NAME + "-new"});
+                        const noticeAccount = this.noticeAccount;
+                        notification.onclick = event => { event?.preventDefault?.(); this.openNoticeQuests(noticeAccount); };
                         this.systemNotices.set(kind, {notification});
                         for (const id of unseen) state.systemSeen[id] = now; this.saveNoticeHistory();
                     } catch (error) { console.error("[" + NAME + "] Windows notification:", error); }
@@ -1045,6 +1094,8 @@ module.exports = class DiscordQuestLauncher {
     }
     stop() {
         this.enabled = false;
+        clearTimeout(this.noticeNavigationTimer); this.noticeNavigationResolve?.();
+        this.noticeNavigationTimer = null; this.noticeNavigationResolve = null; this.noticeNavigating = false;
         this.acceptRun = null; this.acceptingQuests = false; clearTimeout(this.acceptTimer);
         this.acceptTimer = null; this.acceptResolve?.(); this.acceptResolve = null;
         this.updateOwner = null; clearInterval(this.updateCheckTimer); clearInterval(this.updateWaitTimer);
