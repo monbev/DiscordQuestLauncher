@@ -2,7 +2,7 @@
 
 A BetterDiscord plugin for accepted Discord quests, progress tracking, quest filters and new quest notifications.
 
-**Version 1.1.0.** English interface. Quest names follow Discord's language.
+**Development version 1.1.0-dev.** English interface. Quest names follow Discord's language. Stable update checks are disabled in this feature build.
 
 ## Features
 
@@ -38,7 +38,7 @@ Users of 1.0.0 must install 1.0.1 manually once to receive future update notific
 
 ## Usage
 
-**Accept new** clicks native Accept buttons sequentially and confirms enrollment from Discord's quest state. It considers loaded quest cards, including cards hidden by the selected filter. Already accepted, completed, expired, unsupported and Launch Quest tasks are excluded. Platform selection, Watch-only cards and other manual steps are skipped. If a dialog opens or acceptance remains unconfirmed for 12 seconds, the batch stops; check Discord before retrying. The result reports confirmed acceptances and detected manual steps. No quest execution starts automatically. Acceptance is unavailable during an active execution run.
+**Accept new** processes only visible New cards matching the plugin and Discord filters. Loaded cards below the viewport count; cards hidden by any filter do not. Native Accept buttons are clicked sequentially. Video cards with Watch are opened and their video dialog is closed using its native Close button, then enrollment is checked. Already accepted, completed, expired, unsupported and Launch Quest tasks are excluded. Platform selection and other manual steps are skipped. If an unrelated dialog opens, the video cannot be closed safely, or acceptance remains unconfirmed for 12 seconds, the batch stops; check Discord before retrying. The result reports confirmed acceptances and detected manual steps. No quest execution starts automatically. Acceptance is unavailable during an active execution run.
 
 Play starts all accepted, incomplete, unexpired supported quests. The selected filter affects displayed cards, not the execution queue.
 

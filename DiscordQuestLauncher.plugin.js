@@ -2,7 +2,7 @@
  * @name DiscordQuestLauncher
  * @author Suraj64x (original script), monbev (plugin)
  * @description Quest status filters, confirmed progress, estimated queue time and play/pause controls.
- * @version 1.1.0
+ * @version 1.1.0-dev
  * @source https://github.com/monbev/DiscordQuestLauncher
  * @updateUrl https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js
  */
@@ -12,7 +12,7 @@
 const NAME = "DiscordQuestLauncher";
 const PANEL_ID = "discord-quest-launcher-panel";
 const FILTER_ID = "discord-quest-launcher-filters";
-const PLUGIN_VERSION = "1.1.0";
+const PLUGIN_VERSION = "1.1.0-dev";
 const UPDATE_URL = "https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js";
 
 function questAction(button) {
@@ -392,7 +392,7 @@ module.exports = class DiscordQuestLauncher {
         const running = !!this.session?.active;
         this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : "Accept new";
         this.acceptButton.disabled = !!this.acceptingQuests || running;
-        this.acceptButton.title = "Accept loaded quests with a direct Accept button. Platform selection and other manual steps are skipped.";
+        this.acceptButton.title = "Accept visible New quests matching all current filters. Video quests open and close; platform selection is manual.";
         const session = this.session;
         const currentName = session?.runningNames.join("\n") || "Quests";
         const counter = running && session.total ? `${session.processed}/${session.total}` : "";
@@ -821,6 +821,7 @@ module.exports = class DiscordQuestLauncher {
     acceptanceCandidates(now = Date.now()) {
         const result = {ready: [], manual: 0}; const seen = new Set();
         for (const card of findQuestCards()) {
+            if (!this.acceptanceCardVisible(card)) continue;
             const quest = this.questForCard(card), id = quest?.id;
             if (!id || seen.has(id)) continue; seen.add(id);
             const status = quest.userStatus ?? quest.user_status ?? {};
@@ -828,6 +829,7 @@ module.exports = class DiscordQuestLauncher {
             if (!["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"].some(task => tasks[task]) ||
                 status.enrolledAt || status.enrolled_at || status.completedAt || status.completed_at || status.claimedAt || status.claimed_at ||
                 !(Date.parse(quest.config?.expiresAt) > now)) continue;
+            if (cardInfo(card, quest).state !== "new" || !["all", "new"].includes(this.uiSettings.state)) continue;
             const buttons = [...card.querySelectorAll('button, [role="button"]')];
             if (buttons.some(button => questAction(button) === "launch")) continue;
             const button = buttons.find(button => {
@@ -835,9 +837,31 @@ module.exports = class DiscordQuestLauncher {
                 return /\baccept\b|прийняти|принять/i.test(text) &&
                     !/platform|платформ/i.test(text) && !button.disabled && button.getAttribute?.("aria-disabled") !== "true";
             });
-            if (button) result.ready.push({id, button}); else result.manual++;
+            const video = !!(tasks.WATCH_VIDEO || tasks.WATCH_VIDEO_ON_MOBILE);
+            const watch = video && buttons.find(item => questAction(item) === "watch" && !item.disabled && item.getAttribute?.("aria-disabled") !== "true");
+            if (button || watch) result.ready.push({id, button: button || watch, video: !button && !!watch}); else result.manual++;
         }
         return result;
+    }
+    acceptanceCardVisible(card) {
+        if (card.isConnected === false) return false;
+        for (let node = card; node && node !== document.body; node = node.parentElement) {
+            if (node.hidden || node.getAttribute?.("data-dql-filter-hidden") === "true" || node.getAttribute?.("aria-hidden") === "true") return false;
+            const style = window.getComputedStyle?.(node);
+            if (style?.display === "none" || style?.visibility === "hidden" || style?.visibility === "collapse" || style?.contentVisibility === "hidden") return false;
+        }
+        // Laid-out cards below the viewport still count; display:none cards do not.
+        return !card.getClientRects || card.getClientRects().length > 0;
+    }
+    closeAcceptanceVideo(modal) {
+        // Only close the newly opened video dialog, never a CAPTCHA or platform dialog.
+        if (!modal.querySelector?.("video")) return false;
+        const close = [...modal.querySelectorAll('button, [role="button"]')].find(button =>
+            /^(?:close|закрити|закрыть)(?:\s+(?:video|відео|видео|dialog|діалог|диалог))?$/i.test(
+                (button.getAttribute?.("aria-label") || button.textContent || "").trim()) &&
+            !button.disabled && button.getAttribute?.("aria-disabled") !== "true");
+        if (!close) return false;
+        close.click(); return true;
     }
     async acceptNewQuests() {
         if (!this.enabled || this.acceptingQuests || this.session?.active) return;
@@ -853,24 +877,33 @@ module.exports = class DiscordQuestLauncher {
             }
             const candidates = this.acceptanceCandidates(); manual = candidates.manual;
             for (const candidate of candidates.ready) {
-                if (!valid()) return;
+                if (!valid() || !this.isQuestsPage()) return;
                 // Revalidate immediately before clicking; a rerender may replace the button.
                 const current = this.acceptanceCandidates().ready.find(item => item.id === candidate.id);
                 if (!current || current.button.isConnected === false) continue;
                 current.button.click();
-                let confirmed = false;
+                let confirmed = false, videoClosed = !current.video;
                 for (let attempt = 0; attempt < 24; attempt++) {
-                    if (!valid()) return;
+                    if (!valid() || !this.isQuestsPage()) return;
                     const store = BdApi.Webpack?.getStore?.("QuestsStore") || this.filterQuestStore;
                     const quest = store?.getQuest?.(candidate.id) ?? store?.quests?.get?.(candidate.id);
                     const status = quest?.userStatus ?? quest?.user_status ?? {};
-                    if (status.enrolledAt || status.enrolled_at || status.completedAt || status.completed_at || status.claimedAt || status.claimed_at) { confirmed = true; break; }
-                    if (document.querySelector('[data-mana-component="modal"], [role="dialog"]')) break;
+                    if (status.enrolledAt || status.enrolled_at || status.completedAt || status.completed_at || status.claimedAt || status.claimed_at) confirmed = true;
+                    const modal = document.querySelector('[data-mana-component="modal"], [role="dialog"]');
+                    if (modal) {
+                        if (!current.video) break;
+                        if (!videoClosed) {
+                            if (!this.closeAcceptanceVideo(modal)) break;
+                            videoClosed = true;
+                        }
+                    }
+                    if (confirmed && videoClosed && !document.querySelector('[data-mana-component="modal"], [role="dialog"]')) break;
                     await new Promise(resolve => {
                         this.acceptResolve = resolve; this.acceptTimer = setTimeout(() => { this.acceptTimer = null; this.acceptResolve = null; resolve(); }, 500);
                     });
                 }
-                if (confirmed) accepted++; else { manual++; stopped = true; break; }
+                if (confirmed) accepted++;
+                if (!confirmed || !videoClosed) { manual++; stopped = true; break; }
                 if (document.querySelector('[data-mana-component="modal"], [role="dialog"]')) { stopped = true; break; }
             }
             if (!valid()) return;
@@ -883,6 +916,8 @@ module.exports = class DiscordQuestLauncher {
         }
     }
     async checkPluginUpdate() {
+        // Local feature builds must not be replaced by the stable main branch.
+        if (PLUGIN_VERSION.endsWith("-dev")) return;
         if (!this.enabled || this.updateChecking || this.updateWriting || !BdApi.Net?.fetch || !BdApi.UI?.showNotification) return;
         const owner = this.updateOwner; this.updateChecking = true;
         try {
