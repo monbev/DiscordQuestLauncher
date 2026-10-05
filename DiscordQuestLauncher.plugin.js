@@ -2,7 +2,7 @@
  * @name DiscordQuestLauncher
  * @author Suraj64x (original script), monbev (plugin)
  * @description Quest status filters, confirmed progress, estimated queue time and play/pause controls.
- * @version 1.0.1
+ * @version 1.1.0
  * @source https://github.com/monbev/DiscordQuestLauncher
  * @updateUrl https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js
  */
@@ -12,7 +12,7 @@
 const NAME = "DiscordQuestLauncher";
 const PANEL_ID = "discord-quest-launcher-panel";
 const FILTER_ID = "discord-quest-launcher-filters";
-const PLUGIN_VERSION = "1.0.1";
+const PLUGIN_VERSION = "1.1.0";
 const UPDATE_URL = "https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js";
 
 function questAction(button) {
@@ -384,9 +384,15 @@ module.exports = class DiscordQuestLauncher {
             this.progress.setAttribute("role", "status"); this.progress.setAttribute("aria-live", "polite");
             this.button = document.createElement("button"); this.button.type = "button";
             this.button.addEventListener("click", () => this.toggleExecution());
-            panel.append(this.progress, this.button); document.body.append(panel); this.panel = panel;
+            this.acceptButton = document.createElement("button"); this.acceptButton.type = "button";
+            this.acceptButton.style.cssText = "width:auto;padding:0 12px;font-size:12px";
+            this.acceptButton.addEventListener("click", () => this.acceptNewQuests());
+            panel.append(this.progress, this.acceptButton, this.button); document.body.append(panel); this.panel = panel;
         }
         const running = !!this.session?.active;
+        this.acceptButton.textContent = this.acceptingQuests ? "Accepting…" : "Accept new";
+        this.acceptButton.disabled = !!this.acceptingQuests || running;
+        this.acceptButton.title = "Accept loaded quests with a direct Accept button. Platform selection and other manual steps are skipped.";
         const session = this.session;
         const currentName = session?.runningNames.join("\n") || "Quests";
         const counter = running && session.total ? `${session.processed}/${session.total}` : "";
@@ -409,7 +415,7 @@ module.exports = class DiscordQuestLauncher {
         this.button.title = [action, label, detail].filter(Boolean).join("\n");
     }
     toggleExecution() {
-        if (!this.enabled) return;
+        if (!this.enabled || this.acceptingQuests) return;
         if (this.session?.active) this.session.finish("paused");
         else this.execute();
     }
@@ -784,7 +790,7 @@ module.exports = class DiscordQuestLauncher {
         }
     }
     execute() {
-        if (!this.enabled || this.session?.active) return;
+        if (!this.enabled || this.session?.active || this.acceptingQuests) return;
         this.lastResult = ""; this.lastDetail = "";
         const session = new ParallelSession((reason, error) => {
             if (this.session !== session) return;
@@ -811,6 +817,70 @@ module.exports = class DiscordQuestLauncher {
         }, () => this.render());
         this.session = session; this.render();
         session.launch();
+    }
+    acceptanceCandidates(now = Date.now()) {
+        const result = {ready: [], manual: 0}; const seen = new Set();
+        for (const card of findQuestCards()) {
+            const quest = this.questForCard(card), id = quest?.id;
+            if (!id || seen.has(id)) continue; seen.add(id);
+            const status = quest.userStatus ?? quest.user_status ?? {};
+            const tasks = (quest.config?.taskConfig ?? quest.config?.taskConfigV2)?.tasks || {};
+            if (!["WATCH_VIDEO", "WATCH_VIDEO_ON_MOBILE", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY"].some(task => tasks[task]) ||
+                status.enrolledAt || status.enrolled_at || status.completedAt || status.completed_at || status.claimedAt || status.claimed_at ||
+                !(Date.parse(quest.config?.expiresAt) > now)) continue;
+            const buttons = [...card.querySelectorAll('button, [role="button"]')];
+            if (buttons.some(button => questAction(button) === "launch")) continue;
+            const button = buttons.find(button => {
+                const text = `${button.textContent || ""} ${button.getAttribute?.("aria-label") || ""}`;
+                return /\baccept\b|прийняти|принять/i.test(text) &&
+                    !/platform|платформ/i.test(text) && !button.disabled && button.getAttribute?.("aria-disabled") !== "true";
+            });
+            if (button) result.ready.push({id, button}); else result.manual++;
+        }
+        return result;
+    }
+    async acceptNewQuests() {
+        if (!this.enabled || this.acceptingQuests || this.session?.active) return;
+        const userId = () => BdApi.Webpack?.getStore?.("UserStore")?.getCurrentUser?.()?.id;
+        const owner = userId();
+        if (!owner) { BdApi.UI.showToast("Sign in before accepting quests.", {type: "error"}); return; }
+        const run = {}; this.acceptRun = run; this.acceptingQuests = true; this.render();
+        const valid = () => this.enabled && this.acceptRun === run && userId() === owner;
+        let accepted = 0, manual = 0, stopped = false;
+        try {
+            if (document.querySelector('[data-mana-component="modal"], [role="dialog"]')) {
+                BdApi.UI.showToast("Close the open dialog before accepting quests.", {type: "info"}); return;
+            }
+            const candidates = this.acceptanceCandidates(); manual = candidates.manual;
+            for (const candidate of candidates.ready) {
+                if (!valid()) return;
+                // Revalidate immediately before clicking; a rerender may replace the button.
+                const current = this.acceptanceCandidates().ready.find(item => item.id === candidate.id);
+                if (!current || current.button.isConnected === false) continue;
+                current.button.click();
+                let confirmed = false;
+                for (let attempt = 0; attempt < 24; attempt++) {
+                    if (!valid()) return;
+                    const store = BdApi.Webpack?.getStore?.("QuestsStore") || this.filterQuestStore;
+                    const quest = store?.getQuest?.(candidate.id) ?? store?.quests?.get?.(candidate.id);
+                    const status = quest?.userStatus ?? quest?.user_status ?? {};
+                    if (status.enrolledAt || status.enrolled_at || status.completedAt || status.completed_at || status.claimedAt || status.claimed_at) { confirmed = true; break; }
+                    if (document.querySelector('[data-mana-component="modal"], [role="dialog"]')) break;
+                    await new Promise(resolve => {
+                        this.acceptResolve = resolve; this.acceptTimer = setTimeout(() => { this.acceptTimer = null; this.acceptResolve = null; resolve(); }, 500);
+                    });
+                }
+                if (confirmed) accepted++; else { manual++; stopped = true; break; }
+                if (document.querySelector('[data-mana-component="modal"], [role="dialog"]')) { stopped = true; break; }
+            }
+            if (!valid()) return;
+            BdApi.UI.showToast(`Accepted ${accepted} quests${manual ? ` · ${manual} require manual action` : ""}${stopped ? " · batch stopped; check Discord before retrying" : ""}.`, {type: "info"});
+            this.checkNotices();
+        } catch (error) {
+            if (valid()) BdApi.UI.showToast(`Accepted ${accepted} quests. Acceptance stopped: ${String(error.message || error).slice(0, 120)}`, {type: "error"});
+        } finally {
+            if (this.acceptRun === run) { this.acceptingQuests = false; this.acceptRun = null; this.render(); }
+        }
     }
     async checkPluginUpdate() {
         if (!this.enabled || this.updateChecking || this.updateWriting || !BdApi.Net?.fetch || !BdApi.UI?.showNotification) return;
@@ -844,15 +914,15 @@ module.exports = class DiscordQuestLauncher {
     }
     requestPluginUpdate() {
         if (!this.enabled || !this.updateCandidate || this.updateWriting || this.updateWaitTimer) return;
-        if (this.session?.active) {
+        if (this.session?.active || this.acceptingQuests) {
             BdApi.UI.showToast("Update will install when the current quest run ends.", {type: "info"});
             this.updateWaitTimer = setInterval(() => {
-                if (!this.session?.active) { clearInterval(this.updateWaitTimer); this.updateWaitTimer = null; this.installPluginUpdate(); }
+                if (!this.session?.active && !this.acceptingQuests) { clearInterval(this.updateWaitTimer); this.updateWaitTimer = null; this.installPluginUpdate(); }
             }, 1000);
         } else this.installPluginUpdate();
     }
     async installPluginUpdate() {
-        if (!this.enabled || this.session?.active || !this.updateCandidate || this.updateWriting) return;
+        if (!this.enabled || this.session?.active || this.acceptingQuests || !this.updateCandidate || this.updateWriting) return;
         const owner = this.updateOwner, candidate = this.updateCandidate; this.updateWriting = true;
         try {
             const folder = BdApi.Plugins?.folder;
@@ -872,6 +942,8 @@ module.exports = class DiscordQuestLauncher {
     }
     stop() {
         this.enabled = false;
+        this.acceptRun = null; this.acceptingQuests = false; clearTimeout(this.acceptTimer);
+        this.acceptTimer = null; this.acceptResolve?.(); this.acceptResolve = null;
         this.updateOwner = null; clearInterval(this.updateCheckTimer); clearInterval(this.updateWaitTimer);
         this.updateCheckTimer = null; this.updateWaitTimer = null; this.updateNotification?.close?.();
         this.updateNotification = null; this.updateCandidate = null;

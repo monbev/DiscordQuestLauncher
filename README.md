@@ -2,11 +2,12 @@
 
 A BetterDiscord plugin for accepted Discord quests, progress tracking, quest filters and new quest notifications.
 
-**Version 1.0.1.** English interface. Quest names follow Discord's language.
+**Version 1.1.0.** English interface. Quest names follow Discord's language.
 
 ## Features
 
 - Play/Pause controls on the Quests page.
+- Accept new button for loaded quest cards with a direct native Accept action.
 - One video quest and one game/stream/activity quest run in parallel, sequentially within each queue.
 - All / New / In progress / Rewards filters. New excludes Launch Quest tasks.
 - Confirmed progress plus an estimated bar and timer updated every second.
@@ -15,7 +16,7 @@ A BetterDiscord plugin for accepted Discord quests, progress tracking, quest fil
 - Notifications wait while Discord is hidden; existing countdowns pause.
 - An attributed plugin tip in Discord's Reward Error dialog.
 
-Accept quests and claim rewards manually.
+Use Accept new for direct acceptance, or accept quests manually. Claim rewards manually.
 
 ## Installation
 
@@ -36,6 +37,8 @@ Starting with 1.0.1, the plugin checks its public GitHub file on enable and ever
 Users of 1.0.0 must install 1.0.1 manually once to receive future update notifications. Updates require access to GitHub and a BetterDiscord version supporting `BdApi.Net.fetch` and `BdApi.UI.showNotification`. Download manually if these are unavailable.
 
 ## Usage
+
+**Accept new** clicks native Accept buttons sequentially and confirms enrollment from Discord's quest state. It considers loaded quest cards, including cards hidden by the selected filter. Already accepted, completed, expired, unsupported and Launch Quest tasks are excluded. Platform selection, Watch-only cards and other manual steps are skipped. If a dialog opens or acceptance remains unconfirmed for 12 seconds, the batch stops; check Discord before retrying. The result reports confirmed acceptances and detected manual steps. No quest execution starts automatically. Acceptance is unavailable during an active execution run.
 
 Play starts all accepted, incomplete, unexpired supported quests. The selected filter affects displayed cards, not the execution queue.
 
