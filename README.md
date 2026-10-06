@@ -2,12 +2,12 @@
 
 A BetterDiscord plugin for accepted Discord quests, progress tracking, quest filters and new quest notifications.
 
-**Development version 1.1.0-dev.** English interface. Quest names follow Discord's language. Stable update checks are disabled in this feature build.
+**Version 1.1.0.** English interface. Quest names follow Discord's language.
 
 ## Features
 
 - Play/Pause controls on the Quests page.
-- Accept new button for loaded quest cards with a direct native Accept action.
+- Accept new for visible New quests matching all current filters, including video quests through Watch.
 - One video quest and one game/stream/activity quest run in parallel, sequentially within each queue.
 - All / New / In progress / Rewards filters. New excludes Launch Quest tasks.
 - Confirmed progress plus an estimated bar and timer updated every second.
@@ -17,7 +17,7 @@ A BetterDiscord plugin for accepted Discord quests, progress tracking, quest fil
 - Notifications wait while Discord is hidden; existing countdowns pause.
 - An attributed plugin tip in Discord's Reward Error dialog.
 
-Use Accept new for direct acceptance, or accept quests manually. Claim rewards manually.
+Use Accept new for supported acceptance actions, or accept quests manually. Claim rewards manually.
 
 ## Installation
 

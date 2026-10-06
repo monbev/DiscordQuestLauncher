@@ -2,7 +2,7 @@
  * @name DiscordQuestLauncher
  * @author Suraj64x (original script), monbev (plugin)
  * @description Quest status filters, confirmed progress, estimated queue time and play/pause controls.
- * @version 1.1.0-dev
+ * @version 1.1.0
  * @source https://github.com/monbev/DiscordQuestLauncher
  * @updateUrl https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js
  */
@@ -12,7 +12,7 @@
 const NAME = "DiscordQuestLauncher";
 const PANEL_ID = "discord-quest-launcher-panel";
 const FILTER_ID = "discord-quest-launcher-filters";
-const PLUGIN_VERSION = "1.1.0-dev";
+const PLUGIN_VERSION = "1.1.0";
 const UPDATE_URL = "https://raw.githubusercontent.com/monbev/DiscordQuestLauncher/main/DiscordQuestLauncher.plugin.js";
 
 function questAction(button) {
