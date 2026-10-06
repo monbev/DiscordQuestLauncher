@@ -74,6 +74,7 @@ Existing quests are silently remembered on first use for an account. Newly detec
 - A card that expires automatically does not repeatedly notify about the same quests.
 - Hidden-window arrivals remain pending and silent. Existing countdowns pause. Returning to Discord rechecks eligibility before display. Optional Windows notifications are also deferred with the card.
 - Hover/focus pause keeps the card readable. Test notification previews the card and sound without changing quest history.
+- Send test notification also tests Open Quests navigation; with Windows notifications enabled and permission granted it sends a separate Windows test. Test navigation closes only the test notification and leaves real quest notifications intact.
 
 Checks require Discord to be open and the plugin enabled. Reward reminders are left to Discord.
 

@@ -569,6 +569,17 @@ module.exports = class DiscordQuestLauncher {
     notifyQuests(title, names) {
         this.closeNotice("test"); this.testNotice = {title, copy: names.join(" · ")}; this.renderNotices();
         this.playNoticeSound();
+        if (this.noticeSettings.windows && typeof Notification !== "undefined" && Notification.permission === "granted") {
+            try {
+                const account = this.noticeAccount;
+                const notification = new Notification(NAME, {body: "Test notification — click to open Quests in Discord.", tag: NAME + "-test"});
+                notification.onclick = event => { event?.preventDefault?.(); this.openNoticeQuests(account, "test"); };
+                this.systemNotices.set("test", {notification});
+            } catch (error) {
+                console.error(`[${NAME}] Test Windows notification:`, error);
+                BdApi.UI.showToast("Windows test notification could not be shown.", {type: "error"});
+            }
+        }
     }
     async playNoticeSound() {
         if (!this.enabled || !this.noticeSettings.sound || !this.noticeSettings.volume) return;
@@ -615,7 +626,7 @@ module.exports = class DiscordQuestLauncher {
             clearInterval(this.noticeAnimationTimer); this.noticeAnimationTimer = null;
         }
     }
-    async openNoticeQuests(account = this.noticeAccount) {
+    async openNoticeQuests(account = this.noticeAccount, kind = "new") {
         if (!this.enabled || this.noticeNavigating) return false;
         const currentUser = BdApi.Webpack?.getStore?.("UserStore")?.getCurrentUser?.();
         if (account && currentUser?.id !== account) {
@@ -645,7 +656,7 @@ module.exports = class DiscordQuestLauncher {
                 if (!this.enabled || this.updateOwner !== owner) return false;
             }
             if (!this.isQuestsPage()) throw new Error("Discord did not open Quests");
-            this.closeNotice("new"); this.scheduleRender(); return true;
+            this.closeNotice(kind); this.scheduleRender(); return true;
         } catch (error) {
             if (this.enabled && this.updateOwner === owner) {
                 console.error(`[${NAME}] Quest navigation:`, error);
@@ -725,12 +736,14 @@ module.exports = class DiscordQuestLauncher {
                     snooze.addEventListener("click", () => this.reminderAction("snooze")); actions.append(snooze);
                     const dismiss = document.createElement("button"); dismiss.type = "button"; dismiss.textContent = "Dismiss current";
                     dismiss.addEventListener("click", () => this.reminderAction("dismiss")); actions.append(dismiss);
+                }
+                if (kind === "new" || kind === "test") {
                     const open = document.createElement("button"); open.type = "button"; open.textContent = "Open Quests";
                     const noticeAccount = this.noticeAccount;
-                    open.addEventListener("click", () => this.openNoticeQuests(noticeAccount)); actions.append(open);
+                    open.addEventListener("click", () => this.openNoticeQuests(noticeAccount, kind)); actions.append(open);
                     node.addEventListener("click", event => {
                         if (event.target?.closest?.('button, a, input')) return;
-                        this.openNoticeQuests(noticeAccount);
+                        this.openNoticeQuests(noticeAccount, kind);
                     });
                     title.style.cursor = "pointer"; copy.style.cursor = "pointer";
                 }
@@ -823,7 +836,7 @@ module.exports = class DiscordQuestLauncher {
             input.addEventListener("change", () => { this.noticeSettings[key] = Math.round(Math.min(max, Math.max(min, Number(input.value) || min)) * factor); input.value = this.noticeSettings[key] / factor; save(); });
             controls.append(input, document.createTextNode(unit)); row.append(name, controls); timing.append(row);
         }
-        const testSection = section("Test notifications", "Preview the countdown and hover pause without changing your quest notification history.");
+        const testSection = section("Test notifications", "Test the countdown, sound and Open Quests action. A Windows test is also sent when enabled and permitted. Quest history stays unchanged.");
         const test = document.createElement("button"); test.type = "button"; test.textContent = "Send test notification";
         test.style.cssText = "padding:10px 16px;border:0;border-radius:8px;background:var(--brand-500,#5865f2);color:white;font:inherit;cursor:pointer";
         test.addEventListener("click", () => this.notifyQuests("Test notification", ["Notifications are working. This is a test, not a new quest."])); testSection.append(test);
