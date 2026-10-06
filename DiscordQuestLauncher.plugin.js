@@ -637,9 +637,30 @@ module.exports = class DiscordQuestLauncher {
         try {
             window.focus?.();
             if (!this.isQuestsPage()) {
-                let router;
-                try { router = BdApi.Webpack?.getModule?.(item => typeof item?.transitionTo === "function" && typeof item?.replaceWith === "function", {searchExports: true}); } catch {}
-                if (router) router.transitionTo("/quest-home");
+                let transition;
+                // Current Discord exports have mangled names. Identify the
+                // specific routing function by its own diagnostic string.
+                const isTransition = item => typeof item === "function" && Function.prototype.toString.call(item).includes("transitionTo -");
+                try { const found = BdApi.Webpack?.getModule?.(isTransition, {searchExports: true}); if (isTransition(found)) transition = found; } catch {}
+                if (!transition) {
+                    try {
+                        const router = BdApi.Webpack?.getModule?.(item => typeof item?.transitionTo === "function" && (typeof item?.replaceWith === "function" || typeof item?.transitionToGuild === "function"), {searchExports: true});
+                        if (router?.transitionTo) transition = router.transitionTo.bind(router);
+                    } catch {}
+                }
+                if (!transition && typeof webpackChunkdiscord_app !== "undefined") {
+                    try {
+                        const runtime = webpackChunkdiscord_app.push([[Symbol()], {}, value => value]); webpackChunkdiscord_app.pop();
+                        for (const module of Object.values(runtime?.c || {})) {
+                            if (isTransition(module?.exports)) { transition = module.exports; break; }
+                            for (const key of Object.keys(module?.exports || {})) {
+                                try { if (isTransition(module.exports[key])) { transition = module.exports[key]; break; } } catch {}
+                            }
+                            if (transition) break;
+                        }
+                    } catch {}
+                }
+                if (transition) transition("/quest-home");
                 else {
                     // Native navigation fallback: click Discord's route link,
                     // never change location directly or reload the client.
